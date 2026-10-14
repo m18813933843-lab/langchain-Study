@@ -20,10 +20,10 @@ sources:
     resource: repo://libs/Makefile
   - id: openwiki-source-a6e669bb11f217c6fbd06670
     resource: repo://libs/partners/anthropic/Makefile
-generated: { by: "openwiki/0.5.0", at: "2026-09-03T15:18:34.589Z" }
+generated: { by: "openwiki/0.5.0", at: "2026-10-14T08:27:24.310Z" }
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-28T08:35:20.640Z
+    at: 2026-10-14T08:27:24.310Z
 ---
 
 ## Overview
@@ -34,18 +34,19 @@ The LangChain Python monorepo uses `uv` for dependency management, `make` for ta
 
 ### Install Dependencies
 
-Each package in `libs/` has its own `pyproject.toml` and `uv.lock`. Before running tests or making changes, set up dependencies:
+Each package in `libs/` has its own `pyproject.toml` and `uv.lock`. Before running tests or making changes, set up dependencies. From within a package directory:
 
 ```bash
-# Install all dependency groups (lint, typing, test, dev)
+# Install all dependency groups (lint, typing, test, dev, test_integration)
 uv sync --all-groups
 
 # Or install only a specific group
 uv sync --group test
 uv sync --group lint
+uv sync --group typing
 ```
 
-The `--all-groups` flag ensures you have tools for linting, type checking, and testing. See the [Contributing Guide in AGENTS.md](repo://AGENTS.md) for detailed development conventions and PR guidelines.
+The `--all-groups` flag ensures you have tools for linting, type checking, testing, and integration testing. See the [Contributing Guide in AGENTS.md](repo://AGENTS.md) for detailed development conventions and PR guidelines.
 
 ### Pre-Commit Setup
 
@@ -69,10 +70,10 @@ pre-commit run ruff --all-files
 
 The `.pre-commit-config.yaml` defines hooks that enforce:
 
-- **Standard validation**: YAML/TOML syntax checking, proper file endings, no trailing whitespace
+- **Standard validation**: YAML/TOML syntax checking (with custom tag support), proper file endings, no trailing whitespace
 - **Text normalization**: Fix curly quotes and non-standard spaces
-- **Per-package format and lint**: Each package in `libs/` (core, langchain, partners/*) runs `make format lint`
-- **Version consistency checks**: Ensure `pyproject.toml` versions match source code for `langchain-core`, `langchain`, and partner packages
+- **Per-package format and lint**: Each package in `libs/` (core, langchain, standard-tests, text-splitters, and all partner packages) runs `make format lint`
+- **Version consistency checks**: Ensure `pyproject.toml` versions match source code version files for `langchain-core`, `langchain` (langchain_v1), and all partner packages including anthropic, chroma, deepseek, exa, fireworks, groq, huggingface, mistralai, nomic, ollama, openai, openrouter, and perplexity
 
 These hooks automatically prevent commits that fail linting or have formatting issues. They use the same Makefiles documented below.
 
@@ -88,7 +89,7 @@ make test
 cd libs/langchain_v1 && make test
 ```
 
-Unit tests live in `tests/unit_tests/` (no network calls allowed). The test target uses `pytest` with `xdist` for parallelization and socket restrictions to prevent accidental network calls.
+Unit tests live in `tests/unit_tests/` and are restricted from making network calls. The test target uses `pytest` with `xdist` for parallel execution (via `pytest -n auto`) and socket restrictions (`--disable-socket --allow-unix-socket`) to prevent accidental network access.
 
 ### Run a Specific Test File
 
@@ -102,17 +103,29 @@ uv run --group test pytest tests/unit_tests/agents/test_agent.py
 
 ### Integration Tests
 
-Integration tests live in `tests/integration_tests/` and require network access and API keys. Run them separately:
+Integration tests live in `tests/integration_tests/` and require network access and API keys. Run them separately with the test_integration dependency group:
 
 ```bash
 make integration_tests
 ```
 
-Some packages (like `langchain_v1`) use Docker services (PostgreSQL, Redis) for integration tests:
+This uses `uv run --group test --group test_integration pytest tests/integration_tests`.
+
+**Special case: langchain_v1 with Docker services**
+
+The `langchain_v1` package runs unit tests against Docker services (PostgreSQL and Redis) for agent middleware tests. The `make test` target automatically manages the lifecycle:
 
 ```bash
 cd libs/langchain_v1
-make test  # starts services, runs tests, stops services
+make test  # Starts services, runs tests, stops services
+make test_fast  # Skips Docker, uses in-memory services only (LANGGRAPH_TEST_FAST=1)
+```
+
+Service control can also be manual:
+
+```bash
+make start_services   # Start Docker containers
+make stop_services    # Stop Docker containers
 ```
 
 ### Test in Watch Mode
@@ -123,7 +136,7 @@ Auto-re-run tests as you edit code:
 make test_watch
 ```
 
-This uses `pytest-watcher` (via the `ptw` command) and updates snapshots automatically.
+This uses `pytest-watcher` (via the `ptw` command with `--snapshot-update` flag) and automatically updates snapshots. In `langchain_v1`, watch mode also manages Docker services.
 
 ### Coverage Reports
 
@@ -133,7 +146,12 @@ Generate code coverage reports:
 make coverage
 ```
 
-This produces `xml` and term-missing reports, useful for understanding untested code paths.
+This produces `xml` and `term-missing:skip-covered` reports (via `--cov-report`), useful for understanding untested code paths. Some packages (like `langchain_v1`) provide specialized coverage targets:
+
+```bash
+cd libs/langchain_v1
+make coverage_agents  # Run agent middleware tests with coverage report
+```
 
 ## Linting and Formatting
 
@@ -143,10 +161,11 @@ This produces `xml` and term-missing reports, useful for understanding untested 
 make lint
 ```
 
-This runs three checks in order:
-1. **Ruff check**: Linter for logical errors, naming conventions, and code smells
-2. **Ruff format (diff)**: Format checking (does not modify files)
-3. **Mypy**: Static type checking
+This runs checks in order:
+1. **Import linting**: Custom script validation via `./scripts/lint_imports.sh`
+2. **Ruff check** (v0.15.0–0.17.0): Linter for logical errors, naming conventions, and code smells
+3. **Ruff format (diff)**: Format checking (does not modify files)
+4. **Mypy** (v2.1.0–2.2.0): Static type checking
 
 ### Format Code
 
@@ -174,23 +193,21 @@ Run from within a package directory or from the repo root. Ruff processes Python
 
 ### Type Checking
 
-Full type checking with mypy:
+Full type checking with mypy (v2.1.0–2.2.0):
 
 ```bash
-mypy .
-```
-
-Or use the make target:
-
-```bash
+# Using make
 make type
+
+# Or directly with uv
+uv run --all-groups mypy .
 ```
 
-This checks all Python files for type errors (e.g., incorrect argument types, missing type hints). Type checking can be slow for large packages; run it with:
+This checks all Python files for type errors (e.g., incorrect argument types, missing type hints). Type checking can be slow for large packages; run it on specific modules for faster iteration:
 
 ```bash
 # Type check specific file or directory
-mypy libs/core/langchain_core/runnables.py
+mypy libs/langchain_v1/langchain/agents/agent.py
 ```
 
 ## Testing a Single Package
@@ -239,26 +256,28 @@ The `.pre-commit-config.yaml` includes `UV_FROZEN = true`, which prevents unexpe
 
 ## Make Commands Reference
 
-All packages follow the same Makefile structure:
+All packages follow the same Makefile structure. Core targets available in every package:
 
 | Command | Purpose |
 |---------|---------|
-| `make test` | Run all unit tests (pytest) |
+| `make help` | Display all available targets |
+| `make test` | Run all unit tests (with socket restrictions) |
 | `make test TEST_FILE=<path>` | Run tests in a specific file or directory |
-| `make test_watch` | Run tests in watch mode (auto-rerun on changes) |
-| `make integration_tests` | Run integration tests (requires API keys) |
+| `make test_watch` | Run tests in watch mode (auto-rerun on file changes, auto-update snapshots) |
 | `make extended_tests` | Run only tests marked with `@pytest.mark.extended` |
-| `make lint` | Run ruff check + ruff format --diff + mypy |
+| `make integration_tests` | Run integration tests (requires API keys, full network access) |
+| `make lint` | Run import linting + ruff check + ruff format --diff + mypy |
+| `make lint_diff` | Lint only changed files (vs. master branch) |
 | `make format` | Apply ruff format and ruff check --fix |
+| `make format_diff` | Format only changed files (vs. master branch) |
 | `make type` | Run mypy type checking |
 | `make coverage` | Run tests and generate coverage report |
-| `make help` | Display all available targets |
 
-Package-specific commands (see Makefiles in each directory):
+Package-specific and extended targets (see `make help` or Makefiles in each directory):
 
-- `langchain_v1`: `make test_fast`, `make coverage_agents`, `make start_services`, `make stop_services`
-- `core`: `make check_imports`, `make benchmark`
-- `partners/*`: `make test TEST_FILE=tests/integration_tests/`
+- **langchain_v1**: `make test_fast` (skip Docker services), `make test_watch_extended`, `make coverage_agents` (middleware tests), `make start_services`, `make stop_services`, `make benchmark`
+- **core**: `make check_imports`, `make benchmark`, `make test_profile`, `make lint_package`, `make lint_tests`
+- **partners/***: Support `make test TEST_FILE=tests/integration_tests/` for partner-specific integration tests
 
 ## Common Workflows
 
@@ -303,53 +322,74 @@ make format
 ### Linting a Changed File
 
 ```bash
-# Lint only files changed in the current branch
+# Lint only files changed in the current branch (vs. master)
 make lint_diff
 make format_diff
 ```
 
-These targets run on `git diff` output against `master`.
+These targets identify Python and notebook files changed in the current branch and run the same linting/formatting checks on only those files. This speeds up iteration during active development.
 
 ### Type Checking Specific Modules
 
 ```bash
-# Type check a module while developing
+# Type check a single module or file while developing
 mypy libs/langchain_v1/langchain/agents/agent.py
 
-# Type check tests (faster, uses test group)
+# Type check only test files (faster, uses lint group)
 cd libs/langchain_v1
 make lint_tests
+
+# Type check only the package source code
+make lint_package
 ```
 
 ## Environment Variables
 
-The Makefiles use a few environment variables to control behavior:
+The Makefiles use environment variables to control behavior:
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
-| `UV_FROZEN` | Prevent lock file changes during `uv sync` | `true` in Makefiles |
-| `TEST_FILE` | Path to test file or directory | `tests/unit_tests/` |
-| `PYTEST_EXTRA` | Extra pytest options | (empty) |
-| `LANGGRAPH_TEST_FAST` | Use in-memory services instead of Docker | `1` (fast) or `0` (full) |
+| `UV_FROZEN` | Prevent lock file changes during `uv sync` | `true` (exported in all Makefiles) |
+| `TEST_FILE` | Path to test file or directory to run | `tests/unit_tests/` |
+| `PYTEST_EXTRA` | Extra pytest command-line options | (empty) |
+| `LANGGRAPH_TEST_FAST` | Use in-memory services instead of Docker (langchain_v1) | `0` (full Docker) in `make test`, `1` (in-memory) in `make test_fast` |
+| `MYPY_CACHE` | Cache directory for mypy | `.mypy_cache` |
 
-Example: Run fast tests with extra pytest verbosity:
+Example usage:
 
 ```bash
+# Run a specific test directory with verbosity
 make test PYTEST_EXTRA="-vv" TEST_FILE=tests/unit_tests/agents
+
+# Run fast tests in langchain_v1 without Docker services
+cd libs/langchain_v1
+make test_fast  # equivalent to: LANGGRAPH_TEST_FAST=1 make test
 ```
 
 ## Troubleshooting
 
 ### Lock file out of sync
 
+Lock files (`uv.lock`) pin exact dependency versions. If dependencies change or a lock is stale:
+
 ```bash
-# Regenerate lock
+# Regenerate lock for a single package
 cd libs/<package>
 uv lock
 
-# Or check if lock is up-to-date
+# Or check if lock is up-to-date without regenerating
 uv lock --check
+
+# Regenerate locks for all core packages
+cd libs
+make lock
+
+# Verify all locks are up-to-date (CI check)
+cd libs
+make check-lock
 ```
+
+The Makefiles set `UV_FROZEN=true` to prevent accidental lock changes during regular `uv sync`. Always use the commands above when intentionally updating dependencies.
 
 ### Dependencies not installed
 

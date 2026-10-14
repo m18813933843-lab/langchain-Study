@@ -5,7 +5,7 @@ description: "MCPAdapter bridges MCP servers to LangChain agents, discovering to
 tags: [mcp, protocol, tools, adapter, integration, langgraph]
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-28T08:35:20.640Z
+    at: 2026-10-14T08:27:24.310Z
 sources:
   - id: openwiki-source-6d1e3478d5b63988ee177552
     resource: repo://libs/langchain_v1/examples/mcp/auth_bearer.py
@@ -31,7 +31,7 @@ sources:
     resource: repo://libs/langchain_v1/langchain/mcp/elicitation.py
   - id: openwiki-source-4715c337e9b93b9d00846133
     resource: repo://libs/langchain_v1/langchain/mcp/tools.py
-generated: { by: "openwiki/0.5.0", at: "2026-09-28T08:35:20.640Z" }
+generated: { by: "openwiki/0.5.0", at: "2026-10-14T08:27:24.310Z" }
 ---
 
 ## Overview
@@ -488,16 +488,16 @@ LangChain ships runnable examples in `examples/mcp/`:
 
 | Example | Shows | Model | Network |
 |---------|-------|:-----:|:-------:|
-| `transports.py` | in-memory, stdio, HTTP transports | | |
-| `remote_server.py` | public MCP server (DeepWiki) | ✅ | ✅ |
-| `multi_server.py` | `MCPConfig` fleet with tool prefixing | ✅ | |
-| `graph_factory.py` | per-user credentials in a graph factory | | |
-| `protocol_eras.py` | legacy and modern era servers together | ✅ | |
-| `tool_errors.py` | tool failure and model recovery | ✅ | |
-| `elicitation.py` | server requesting user input mid-call | ✅ | |
-| `destructive_interrupt.py` | gating destructive tools via metadata | ✅ | |
-| `auth_bearer.py` | static bearer token | | |
-| `auth_oauth.py` | OAuth 2.1 with dynamic client registration | | |
+| `transports.py` | one adapter over in-memory, stdio, and HTTP | | |
+| `remote_server.py` | pointing the adapter at a public MCP server (DeepWiki) | ✅ | ✅ |
+| `multi_server.py` | several servers behind one adapter, tools prefixed per server | ✅ | |
+| `graph_factory.py` | one long-lived adapter shared by every run of a langgraph dev graph | | |
+| `protocol_eras.py` | one agent holding tools from both MCP protocol eras | ✅ | |
+| `tool_errors.py` | a failing tool reaching the model so it can retry | ✅ | |
+| `elicitation.py` | a server asking a human mid-call, via interrupt() | ✅ | |
+| `destructive_interrupt.py` | gating destructive tools behind approval, from tool metadata | ✅ | |
+| `auth_bearer.py` | a server behind a static bearer token | | |
+| `auth_oauth.py` | a full OAuth 2.1 flow with dynamic client registration | | |
 
 Run examples with:
 
@@ -506,6 +506,8 @@ uv sync --extra mcp --extra anthropic
 export ANTHROPIC_API_KEY=...
 uv run examples/mcp/transports.py
 ```
+
+`remote_server.py` calls DeepWiki, a public MCP server, so it needs internet access. `auth_oauth.py` opens a browser tab; the demo authorization server auto-approves, so it redirects straight back.
 
 ## Integration Points
 

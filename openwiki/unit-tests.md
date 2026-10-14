@@ -5,7 +5,7 @@ description: "Guide to writing unit tests: test structure, mocking chat models, 
 tags: [unit-tests, pytest, testing, fixtures, mocking, chat-models, tools, agents, integration, assertions]
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-28T08:35:20.640Z
+    at: 2026-10-14T08:27:24.310Z
 sources:
   - id: openwiki-source-8f1875229ad4a704c8e20a06
     resource: repo://libs/core/Makefile
@@ -45,7 +45,7 @@ sources:
     resource: repo://libs/standard-tests/langchain_tests/unit_tests/embeddings.py
   - id: openwiki-source-a6b31954b6df57580d0f3ed0
     resource: repo://libs/standard-tests/langchain_tests/unit_tests/tools.py
-generated: { by: "openwiki/0.5.0", at: "2026-09-28T08:35:20.640Z" }
+generated: { by: "openwiki/0.5.0", at: "2026-10-14T08:27:24.310Z" }
 ---
 
 ## Overview
@@ -318,6 +318,8 @@ The root `conftest.py` in `tests/unit_tests/` provides shared fixtures and pytes
 
 **From `/libs/core/tests/unit_tests/conftest.py`**:
 
+The `blockbuster` fixture (autouse=True) prevents blocking I/O in async code by registering allowed blocking calls:
+
 ```python
 @pytest.fixture(autouse=True)
 def blockbuster() -> Iterator[BlockBuster]:
@@ -343,6 +345,8 @@ def blockbuster() -> Iterator[BlockBuster]:
             bb_function.can_block_in("freezegun/api.py", "_get_cached_module_attributes")
         yield bb
 ```
+
+This fixture enables detection of unintended blocking operations in tests that should run asynchronously.
 
 ### Agent Test Fixtures
 
@@ -376,6 +380,33 @@ async def async_checkpointer(request: pytest.FixtureRequest) -> AsyncIterator[Ba
 ```
 
 Set `LANGGRAPH_TEST_FAST=true` environment variable to run against only in-memory backends for fast iteration.
+
+### Runnable LangSmith Isolation Fixture
+
+The runnables conftest.py includes a fixture that disables LangSmith tracing to keep tests isolated:
+
+```python
+@pytest.fixture(scope="session", autouse=True)
+def _disable_local_langsmith_tracing() -> Iterator[None]:
+    """Keep runnable unit tests independent of developer LangSmith env vars."""
+    env_vars = (
+        "LANGCHAIN_TESTS_USER_AGENT",
+        "LANGCHAIN_TRACING_V2",
+        "LANGSMITH_API_KEY",
+        "LANGSMITH_LANGGRAPH_API_VARIANT",
+        "LANGSMITH_PROJECT",
+        "LANGSMITH_TRACING",
+    )
+    previous_env = {env_var: os.environ.get(env_var) for env_var in env_vars}
+    os.environ["LANGSMITH_TRACING"] = "false"
+    for env_var in env_vars:
+        if env_var != "LANGSMITH_TRACING":
+            os.environ.pop(env_var, None)
+    yield
+    # Restore previous environment
+```
+
+This session-scoped fixture runs once per test session and prevents LangSmith environment variables from interfering with test execution.
 
 **Custom Markers**:
 
@@ -648,6 +679,8 @@ def test_agent_stream_events():
     assert tool_calls[0].completed is True
 ```
 
+The `ToolCallTransformer` is registered by default on the agent streamer, automatically populating the `tool_calls` projection without explicit opt-in.
+
 ### Message Matching with Any ID
 
 Test message content independently of generated UUIDs:
@@ -666,6 +699,8 @@ def test_agent_message_flow():
     assert result["messages"][0] == _AnyIdHumanMessage(content="hi")
     assert isinstance(result["messages"][1], AIMessage)
 ```
+
+The `AnyStr` class matches any string with optional prefix or regex pattern, enabling test assertions independent of generated UUIDs.
 
 ### Fixture Usage
 
@@ -1038,6 +1073,7 @@ make coverage
 - **pydantic_utils.py** (`libs/core/tests/unit_tests/pydantic_utils.py`): Schema normalization for cross-version Pydantic compatibility
 - **fake/callbacks.py** (`libs/core/tests/unit_tests/fake/callbacks.py`): FakeCallbackHandler for tracking events
 - **fake/test_fake_chat_model.py**: Examples of testing fake models
+- **runnables/conftest.py** (`libs/core/tests/unit_tests/runnables/conftest.py`): LangSmith tracing isolation for runnable tests
 
 ## Best Practices
 
@@ -1068,3 +1104,5 @@ make coverage
 13. **Assert message types and content**: Verify the shape of agent responses, tool calls, and state updates.
 
 14. **Test error recovery**: Verify agents recover from invalid tool calls and other errors gracefully.
+
+15. **Respect socket restrictions**: Ensure tests do not make network calls; use fake models and mocks instead.

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:05e90b9de166a5a7213cee462a99c10236b8c8eba605f2b5a856779baad552a6",
+  "pageVersion": "sha256:d107de765a91057a6bbfc414008f58d54389ab03a3b8606c1eb64424fd76a6e4",
   "claims": [
     {
       "id": "claim_347664eb68464142b558791c7a95093f",
@@ -8,7 +8,7 @@
       "evidence": [
         {
           "resource": "repo://libs/partners/openai/langchain_openai/__init__.py",
-          "version": "repo-file-v1:sha256:d08e06dea1f954a477fa8951e2a8387a10396d07b92a3a60fdced307c136a84f"
+          "version": "repo-file-v1:sha256:5673ccbe8f53267c2027dd390051424928a6e1e744c2f8c8a418960a29dccf4d"
         },
         {
           "resource": "repo://libs/partners/openai/langchain_openai/chat_models/base.py#L2904-L4266",
@@ -255,10 +255,34 @@
           "version": "repo-lines-v1:sha256:4796c14704f049c8340f8cb74976a7f9e7af36bb8fbf9250e8c163d7a4124e0d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIwYWIyNjQwNjA4YTZlZGJhZGE4MDJlYTdlYzA1NjYxM2JhOTFhY2Q5ZTdhOGIwZjcxOGRmODQ1Yjg4YzBlMDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjliY2FkYzRlMjljMmM0NWUyOTI5NjcwZmZiNGJiNDZiY2JjNDRlYWIzNTAyNzAzNWJmNDVmYjFiMTdiYzU1ZDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhhODNkNzQxZTM3NWRlNGMzMWI3Yzc4Mzg3YzdjN2UyNzUxZWY4NTU5MWE3ZWE3ZjkwYzNmN2E3NTQ5NTQ0ZmUifQ"
         }
       ]
+    },
+    {
+      "id": "claim_4a5ffbff1faa4ea9b95ed6c97dbb8b6f",
+      "statement": "OpenAIDecisions is a RunnableSerializable for the OpenAI Decisions API that asks typed questions (Predicate probabilities, Choice selections, Score ratings) over text or images in a single request, returning DecisionResponse with answer types, probabilities, confidence scores, and token usage.",
+      "evidence": [
+        {
+          "resource": "repo://libs/partners/openai/langchain_openai/decisions/base.py#L37-L100",
+          "version": "repo-lines-v1:sha256:67c26060eb2224762a1d962d0aafe1044d544fb78f825c4fe23b147e4042037d:eyJzZWxlY3RlZExpbmVDb3VudCI6NjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ5NDA2YWZiY2ZlNjYyMTgxOGU1M2E3OWU2NzU5MzYxNTAxNmE0Y2IyZWUzYTI2M2U5MGYwNDlmZDU4ZGNiOWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2ZWY2ZDQ3NjI3Yzk4YzFjYWFkYTM4MDMzZDQzZTEyYzE5YTA3OTNiN2E5OTNjNWUwYTdmZDdlNjRiMmNmNTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYyMDA5N2U0YWE1MDA2OGJhMTU3ZjlhMjczOWZhZDg2OTk1ZTFlMGNkY2NkYWRjNTg5N2MyMDM0Yzc0ZDNlZmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIzZWM5NjE3YmYwYTdiMjY4YzUwMWNhN2VlMzgyYmQ1MmVhZDU4ZWFiNDJiMzZlMzA2OWY0MTg0NjIwZDE0ZjAifQ"
+        },
+        {
+          "resource": "repo://libs/partners/openai/langchain_openai/decisions/types.py",
+          "version": "repo-file-v1:sha256:f7f9be7956993aa282e865b042ac860c7ea1ca0a9295e24f32d8159aaf2b55cc"
+        }
+      ]
+    },
+    {
+      "id": "claim_11816c94968f4c8b990f3545126dc4cd",
+      "statement": "OpenAIAutoModeMiddleware is beta agent middleware that uses the Decisions API to classify tool calls as risky (probability >= 0.5) or low-risk, blocking risky calls with error ToolMessages before execution. It handles media fallback when images are oversized and bypasses classification for unregistered tools.",
+      "evidence": [
+        {
+          "resource": "repo://libs/partners/openai/langchain_openai/middleware/auto_mode.py#L64-L80",
+          "version": "repo-lines-v1:sha256:fe98fc79bd8d77e58d88c2a453c84a0e0a746cfc79806da1f28923903b478d27:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ5NDA2YWZiY2ZlNjYyMTgxOGU1M2E3OWU2NzU5MzYxNTAxNmE0Y2IyZWUzYTI2M2U5MGYwNDlmZDU4ZGNiOWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYzZTA2NmMzYTU5MzM5Mzg0YjdiNDc2NDUxNzIyNjFhYWY0YWM0NTA0MTVjYzE3NDUyNzI4MzY3NDliN2YxMWUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE5OGIwNjNkOWI0N2U2NTM3OTYyNTU3MmNjZTE5NzY2OWQ1NzY3ZTEyYzE4YmUwNzU2NTJiOGNkOTgxY2U4ZDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjEwZTI5MGI5OWQxNDVlMmNiMmQ5ZGNkMTU3Y2FmMGJiZWNlMzQxYjRkNDY1YTExMTFlMzIzODcyNWEyMjIyMmMifQ"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-28T08:35:20.640Z"
+    "at": "2026-10-14T08:27:24.310Z"
   }
 }

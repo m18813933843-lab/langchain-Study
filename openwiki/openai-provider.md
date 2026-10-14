@@ -1,8 +1,8 @@
 ---
 type: "ChatModel Integration"
 title: "OpenAI Integration: ChatOpenAI and Azure Support"
-description: "ChatOpenAI integration for OpenAI's Chat Completions and Responses APIs, with support for tool calling, structured output, vision, streaming, and Azure deployment."
-tags: ["openai", "chat-models", "tool-calling", "structured-output", "vision", "azure"]
+description: "ChatOpenAI integration for OpenAI's Chat Completions and Responses APIs, with support for tool calling, structured output, vision, streaming, Azure deployment, Decisions API, and safety middleware."
+tags: ["openai", "chat-models", "tool-calling", "structured-output", "vision", "azure", "decisions-api", "middleware"]
 sources:
   - id: openwiki-source-1e66a9da38565f8901e651f4
     resource: repo://libs/partners/openai/langchain_openai/__init__.py
@@ -12,10 +12,16 @@ sources:
     resource: repo://libs/partners/openai/langchain_openai/chat_models/base.py
   - id: openwiki-source-74e5bef080f1af7da12371cf
     resource: repo://libs/partners/openai/langchain_openai/data/_profiles.py
-generated: { by: "openwiki/0.5.0", at: "2026-09-28T08:35:20.640Z" }
+  - id: openwiki-source-b65307f1d05bd74532af2eee
+    resource: repo://libs/partners/openai/langchain_openai/decisions/base.py
+  - id: openwiki-source-122b01e9aef52272c0a77739
+    resource: repo://libs/partners/openai/langchain_openai/decisions/types.py
+  - id: openwiki-source-22c4d13fc1ad9b58545a0abf
+    resource: repo://libs/partners/openai/langchain_openai/middleware/auto_mode.py
+generated: { by: "openwiki/0.5.0", at: "2026-10-14T08:27:24.310Z" }
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-28T08:35:20.640Z
+    at: 2026-10-14T08:27:24.310Z
 ---
 
 ## Overview
@@ -29,6 +35,8 @@ The OpenAI integration (`langchain-openai`) provides production-ready chat model
 - **Vision** support for gpt-4-vision and gpt-4o models with image inputs
 - **Streaming tokens** via callback integration with per-chunk timeouts
 - **Model profiles** with capability metadata (input/output modalities, max tokens, tool support)
+- **Decisions API** for typed questions (predicates, choices, scores) over text or images
+- **Safety middleware** (OpenAI auto-mode) to classify and block risky tool calls
 
 **Core Principle**: `ChatOpenAI` targets [official OpenAI API specifications](https://github.com/openai/openai-openapi) only. Non-standard response fields added by third-party providers (e.g., `reasoning_content` on vLLM, `reasoning_details` on DeepSeek) are **not** extracted or preserved. For provider-specific features, use the corresponding provider-specific LangChain package (e.g., `ChatDeepSeek`, `ChatOpenRouter`).
 
@@ -36,7 +44,7 @@ The OpenAI integration (`langchain-openai`) provides production-ready chat model
 
 **Package**: `repo://libs/partners/openai/langchain_openai/`
 
-**Main Class**: `repo://libs/partners/openai/langchain_openai/chat_models/base.py#L2904-L4266`
+**Main Class**: `repo://libs/partners/openai/langchain_openai/chat_models/base.py#L2913-L4266`
 
 **Exports**: `repo://libs/partners/openai/langchain_openai/__init__.py`
 
@@ -44,6 +52,8 @@ Related classes:
 - `BaseChatOpenAI`: Base implementation shared with Azure OpenAI
 - `AzureChatOpenAI`: Azure-specific subclass in `repo://libs/partners/openai/langchain_openai/chat_models/azure.py`
 - `OpenAI` (legacy): Completion-only model in `repo://libs/partners/openai/langchain_openai/llms/`
+- `OpenAIDecisions`: Decisions API integration in `repo://libs/partners/openai/langchain_openai/decisions/base.py`
+- `OpenAIAutoModeMiddleware`: Safety middleware in `repo://libs/partners/openai/langchain_openai/middleware/auto_mode.py`
 
 ## ChatOpenAI Class
 
@@ -854,6 +864,196 @@ response = model.invoke([message])
 For **Chat Completions API**, certain content block types are filtered (e.g., `thinking`, `tool_use`).
 For **Responses API**, content blocks are expanded to support reasoning, computer use, file search, etc.
 
+## Decisions API
+
+The **OpenAI Decisions API** enables typed questions over text or images. `OpenAIDecisions` is a LangChain `Runnable` that asks `Predicate` probabilities, `Choice` selections, and `Score` ratings in a single request, returning structured responses with confidence scores.
+
+### Overview
+
+The Decisions API is useful for:
+- **Classification**: Route requests based on predicted intent or severity
+- **Risk assessment**: Estimate probability of harmful content or risky actions
+- **Sentiment/Quality scoring**: Rate text on custom dimensions
+- **Multi-question analysis**: Ask multiple questions over the same input
+
+### Constructor and Configuration
+
+```python
+from langchain_openai import OpenAIDecisions
+
+decisions = OpenAIDecisions(
+    model="gpt-6-luna",
+    api_key="your-api-key",  # Inferred from OPENAI_API_KEY if omitted
+    base_url="https://api.openai.com/v1",  # Optional; see base_url resolution
+    organization="your-org-id",  # Inferred from OPENAI_ORG_ID if omitted
+    timeout=30.0,
+    max_retries=2,
+)
+```
+
+**Parameters mirror ChatOpenAI**: `api_key`, `base_url`, `organization`, `timeout`, `max_retries`, `http_client`, `http_async_client`, `default_headers`, `default_query`.
+
+### Question Types
+
+The Decisions API supports three question types:
+
+```python
+from langchain_openai.decisions import Predicate, Choice, Score, DecisionRequest
+
+# Predicate: Binary yes/no with probability
+questions = {
+    "is_spam": Predicate(
+        instructions="Is this email spam?"
+    ),
+}
+
+# Choice: Select from options
+questions = {
+    "department": Choice(
+        instructions="Which team should handle this?",
+        choices={
+            "billing": "Payment or subscription issues",
+            "technical": "Product bugs or errors",
+            "support": "General assistance",
+        }
+    )
+}
+
+# Score: Rate on a scale
+questions = {
+    "urgency": Score(
+        instructions="How urgent is this request?",
+        levels=["Low", "Medium", "High", "Critical"]
+    )
+}
+```
+
+### Invocation
+
+```python
+response = decisions.invoke(
+    {
+        "input": "My account is locked and I can't log in. Help ASAP!",
+        "questions": {
+            "urgency": Score(
+                instructions="Rate urgency",
+                levels=["Low", "Medium", "High", "Critical"]
+            ),
+            "is_billing": Predicate(
+                instructions="Is this a billing issue?"
+            ),
+            "department": Choice(
+                instructions="Route to department",
+                choices={"billing": "Billing", "technical": "Technical"}
+            )
+        }
+    }
+)
+
+print(response.scores["urgency"].score)  # 3 (Critical)
+print(response.predicates["is_billing"].probability)  # 0.1
+print(response.choices["department"].choice)  # "technical"
+print(response.usage.input_tokens)  # Token count
+```
+
+### Response Structure
+
+`DecisionResponse` contains:
+- **`predicates`**: Dict of `PredicateAnswer` (probability, confidence)
+- **`choices`**: Dict of `ChoiceAnswer` (selected choice, confidence, option_confidences)
+- **`scores`**: Dict of `ScoreAnswer` (selected score index, confidence)
+- **`refusals`**: List of `RefusalAnswer` if model refused any question
+- **`usage`**: Token usage metadata
+
+### Async Support
+
+```python
+response = await decisions.ainvoke(
+    {
+        "input": "...",
+        "questions": {...}
+    }
+)
+```
+
+## Middleware: OpenAI Auto-Mode
+
+**OpenAI Auto-Mode** is a beta middleware that uses the Decisions API to classify tool calls as risky or low-risk, blocking risky calls before execution. It integrates with LangChain's agent execution system.
+
+### Overview
+
+`OpenAIAutoModeMiddleware` inspects each tool call request and asks a `Predicate` question: *"Would executing this tool be risky or insufficiently authorized?"* Calls with probability ≥ 0.5 are blocked; others execute normally.
+
+**Use cases:**
+- Prevent unauthorized file/credential access
+- Block destructive operations without user confirmation
+- Gate external API calls in multi-step agents
+- Implement approval workflows without human-in-the-loop overhead
+
+### Setup
+
+```python
+from langchain.agents import create_agent
+from langchain_openai.middleware import OpenAIAutoModeMiddleware
+
+# Define tools (e.g., file ops, API calls, etc.)
+tools = [read_file, write_file, delete_file, call_external_api]
+
+auto_mode = OpenAIAutoModeMiddleware(
+    tools=tools,  # Which tools to inspect
+    model="gpt-6-luna",
+    api_key="your-api-key",  # Optional; inferred from OPENAI_API_KEY
+    instructions="Custom risk assessment prompt (optional)",
+    probability_threshold=0.5,  # Block if P(risky) >= threshold
+)
+
+agent = create_agent(
+    model=ChatOpenAI(model="gpt-4o"),
+    tools=tools,
+    middleware=[auto_mode],  # Register middleware
+)
+```
+
+### Behavior
+
+1. **Low-risk calls** (P < 0.5): Execute normally
+2. **High-risk calls** (P ≥ 0.5): Return error `ToolMessage` without executing
+3. **Unclassifiable requests**: Return refusal message (e.g., if Decisions API can't process images due to size)
+4. **Unregistered tools**: Bypass classification and execute
+
+### Messages and Fallback
+
+When a tool call is blocked:
+```
+"The tool call `delete_file` was blocked because it was classified as risky (probability: 0.78). The tool was not executed."
+```
+
+If classification fails (e.g., oversized image), a fallback prompt is sent to the Decisions API without media; if still refused:
+```
+"The tool call `call_api` was blocked because its risk could not be assessed. The tool was not executed."
+```
+
+### Customization
+
+```python
+auto_mode = OpenAIAutoModeMiddleware(
+    tools=[read_file, write_file],
+    model="gpt-6-luna",
+    instructions=(
+        "Assess risk strictly. Consider: credential access, external sharing, "
+        "destructive operations, and authorization level. Answer yes only if execution "
+        "would violate policy or user authorization."
+    ),
+    probability_threshold=0.6,  # Higher threshold = fewer blocks
+)
+```
+
+### Media Handling
+
+- **Base64 images**: Included in Decisions API request
+- **Audio/video/files**: Replaced with placeholders (unsupported media types)
+- **Oversized requests**: Retried without media on HTTP 413
+
 ## Azure OpenAI Integration
 
 `AzureChatOpenAI` is a specialized subclass for Azure OpenAI deployments. It inherits all `ChatOpenAI` functionality (tool calling, structured output, streaming, vision) but with Azure-specific authentication, endpoint routing, and response metadata handling.
@@ -1146,6 +1346,8 @@ model = ChatOpenAI(
 3. **Responses API limitations**: Not all Chat Completions parameters are supported in Responses API (e.g., `n` is not supported).
 4. **Structured output schema validation**: The `json_schema` method requires schemas to meet OpenAI's supported-schemas constraints.
 5. **Azure API version coupling**: Azure requires explicit `api_version` and ties it to feature availability (e.g., structured output only in newer versions).
+6. **Decisions API beta**: OpenAI Decisions API is in beta; API signatures and behavior may change.
+7. **Auto-Mode media filtering**: Audio/video/file content is replaced with placeholders; only base64 images are forwarded to Decisions API.
 
 ## Related Pages
 
@@ -1154,3 +1356,4 @@ model = ChatOpenAI(
 - `/openwiki/messages.md`: Message types and content blocks (text, images, tool calls)
 - `/openwiki/partner-pattern.md`: Partner package patterns and extension points
 - `/openwiki/structured-output.md`: Structured output patterns and schema validation
+- `/openwiki/middleware.md`: Agent middleware system for request/response interception

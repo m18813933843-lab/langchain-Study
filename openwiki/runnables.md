@@ -14,10 +14,10 @@ sources:
     resource: repo://libs/core/langchain_core/runnables/fallbacks.py
   - id: openwiki-source-ebe3f825462d0b4a14ee3717
     resource: repo://libs/core/langchain_core/runnables/retry.py
-generated: { by: "openwiki/0.5.0", at: "2026-09-03T15:18:34.589Z" }
+generated: { by: "openwiki/0.5.0", at: "2026-10-14T08:27:24.310Z" }
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-28T08:35:20.640Z
+    at: 2026-10-14T08:27:24.310Z
 ---
 
 ## Overview
@@ -99,7 +99,13 @@ def stream(
 
 ### Asynchronous Methods
 
-**`ainvoke(input, config=None)`** (`repo://libs/core/langchain_core/runnables/base.py#L908-L929`) is the async variant:
+Async methods use one of two strategies:
+1. **Native async**: Subclasses implement async methods directly (e.g., models with async API clients).
+2. **Executor delegation**: Default implementations use `run_in_executor` to call sync methods in a thread pool, enabling async interfaces for sync-only components.
+
+All async methods respect `max_concurrency` from config to limit parallel execution.
+
+**`ainvoke(input, config=None)`** (`repo://libs/core/langchain_core/runnables/base.py#L909-L930`) is the async variant:
 
 ```python
 async def ainvoke(
@@ -114,7 +120,7 @@ async def ainvoke(
 - **Default**: Delegates to sync `invoke` via `run_in_executor`.
 - **Subclasses override** for native async (e.g., async API calls).
 
-**`abatch(inputs, config=None, return_exceptions=False)`** (`repo://libs/core/langchain_core/runnables/base.py#L1066-L1112`) batches async:
+**`abatch(inputs, config=None, return_exceptions=False)`** (`repo://libs/core/langchain_core/runnables/base.py#L1067-L1113`) batches async:
 
 ```python
 async def abatch(
@@ -125,15 +131,16 @@ async def abatch(
     return_exceptions: bool = False,
     **kwargs: Any | None,
 ) -> list[Output]:
-    """Default implementation runs ainvoke in parallel using asyncio.gather."""
+    """Default implementation runs ainvoke in parallel using gather_with_concurrency."""
 ```
 
-- Calls `ainvoke` for each input concurrently.
-- Respects `max_concurrency` from config to limit parallelism.
+- Calls `ainvoke` for each input concurrently via `gather_with_concurrency`.
+- Respects `max_concurrency` from config to limit parallelism (respects semaphore for controlled concurrency).
+- Config can be a single `RunnableConfig` (applied to all) or a list of per-input configs.
 
 **`abatch_as_completed(inputs, config=None, return_exceptions=False)`** yields completed async results as they finish.
 
-**`astream(input, config=None)`** (`repo://libs/core/langchain_core/runnables/base.py#L1215-L1234`) is the async streaming variant:
+**`astream(input, config=None)`** (`repo://libs/core/langchain_core/runnables/base.py#L1216-L1235`) is the async streaming variant:
 
 ```python
 async def astream(
@@ -146,7 +153,7 @@ async def astream(
 ```
 
 - **Default**: Yields one output from `ainvoke`.
-- **Specialized** for streaming backends.
+- **Specialized implementations** (e.g., chat models, streaming parsers) yield chunks as they arrive asynchronously.
 
 ### Schema Introspection
 
@@ -259,7 +266,7 @@ sequence = RunnableSequence(
 
 ### Branching: RunnableBranch
 
-**Location**: `repo://libs/core/langchain_core/runnables/branch.py#L43-L150`
+**Location**: `repo://libs/core/langchain_core/runnables/branch.py#L43-L457`
 
 `RunnableBranch` selects and runs one of several branches based on a condition:
 
@@ -306,7 +313,7 @@ router.invoke({"key": "math", "input": "2 + 2"})  # Uses math_chain
 
 ### Fallback and Retry
 
-**Fallbacks**: `RunnableWithFallbacks` (`repo://libs/core/langchain_core/runnables/fallbacks.py#L37-L150`)
+**Fallbacks**: `RunnableWithFallbacks` (`repo://libs/core/langchain_core/runnables/fallbacks.py#L37-L600`)
 
 ```python
 from langchain_core.runnables import RunnableWithFallbacks
@@ -322,7 +329,7 @@ result = model.invoke("Hello")  # Returns first successful result
 - Proceeds until one succeeds or all fail.
 - Optionally passes exceptions to fallbacks for adaptive recovery.
 
-**Retry**: `RunnableRetry` (`repo://libs/core/langchain_core/runnables/retry.py#L48-L150`)
+**Retry**: `RunnableRetry` (`repo://libs/core/langchain_core/runnables/retry.py#L50-L383`)
 
 ```python
 runnable = ChatOpenAI().with_retry(
@@ -333,15 +340,19 @@ runnable = ChatOpenAI().with_retry(
 # Retries on APIError up to 3 times with exponential backoff + jitter.
 ```
 
-- Uses `tenacity` for retry logic.
-- Configurable stop conditions, wait strategies, and exception types.
+- Uses `tenacity` for retry logic with exponential backoff and jitter.
+- Configurable exception types via `retry_exception_types` (accepts tuple of exception classes or callable).
+- `max_attempt_number` controls maximum retry attempts (default 3).
+- `wait_exponential_jitter` enables jitter-based wait strategy; customizable via `exponential_jitter_params`.
+- Patches config on each retry attempt with `retry:attempt:N` tag for observability.
 - Best applied to individual runnables (e.g., LLM calls) rather than entire chains.
+- Supports both sync (`invoke`) and async (`ainvoke`) execution with retry semantics.
 
 ## RunnableConfig: Threading Context
 
 **Location**: `repo://libs/core/langchain_core/runnables/config.py#L57-L129`
 
-`RunnableConfig` is a `TypedDict` that carries execution context through the chain:
+`RunnableConfig` is a `TypedDict` with `total=False` that carries execution context through the chain:
 
 ```python
 class RunnableConfig(TypedDict, total=False):
@@ -349,16 +360,19 @@ class RunnableConfig(TypedDict, total=False):
     metadata: dict[str, Any]     # Arbitrary metadata (JSON-serializable)
     callbacks: Callbacks         # Lifecycle handlers (on_start, on_end, on_error, etc.)
     run_name: str                # Name for tracing/logging
-    max_concurrency: int | None  # Limit parallel execution
+    max_concurrency: int | None  # Limit parallel execution (AsyncIO/ThreadPool)
     recursion_limit: int         # Prevent infinite recursion (default 25)
     configurable: dict[str, Any] # Runtime config overrides for configurable fields
-    run_id: uuid.UUID | None     # Unique execution ID
+    run_id: uuid.UUID | None     # Unique execution ID for tracing
 ```
+
+**Key design**: `total=False` allows partial configs to be created and merged together, supporting propagation patterns where child configs inherit and extend parent configs.
 
 - **Propagation**: Config is threaded through child runnables via context variables (`var_child_runnable_config`) and explicit parameter passing.
 - **Merging**: Configs are merged when passed down (e.g., tags accumulate: parent tags + child tags).
-- **Callbacks**: Attached callbacks receive hooks for all intermediate steps, enabling observability and custom logic.
+- **Callbacks**: Attached callbacks receive hooks for all intermediate steps, enabling observability and custom logic. Callbacks are patched with child contexts on each step.
 - **Configurable fields**: The `configurable` dict supplies runtime values for fields marked with `configurable_fields()` or `configurable_alternatives()`, enabling dynamic behavior.
+- **Concurrency control**: `max_concurrency` is used by `abatch` via `gather_with_concurrency` to limit async parallelism and by `batch` to configure thread pool executors.
 
 ## Core Runnable Types
 

@@ -36,10 +36,10 @@ sources:
     resource: repo://libs/partners/openai/tests/unit_tests/chat_models/test_responses_standard.py
   - id: openwiki-source-025cad4ae99967890152b7e0
     resource: repo://libs/standard-tests/README.md
-generated: { by: "openwiki/0.5.0", at: "2026-09-22T08:27:06.345Z" }
+generated: { by: "openwiki/0.5.0", at: "2026-10-14T08:27:24.310Z" }
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-28T08:35:20.640Z
+    at: 2026-10-14T08:27:24.310Z
 ---
 
 ## Overview
@@ -108,7 +108,7 @@ requires-python = ">=3.10.0,<4.0.0"
 version = "0.1.0"
 
 dependencies = [
-    "langchain-core>=1.6.2,<2.0.0",           # Required: base LangChain
+    "langchain-core>=1.6.10,<2.0.0",          # Required: base LangChain
     "provider-client-library>=2.45.0,<4.0.0", # Provider's own SDK (pinned version)
     "certifi>=2024.6.2",                      # SSL certificates
 ]
@@ -633,7 +633,7 @@ Use the `langchain-model-profiles` CLI tool to refresh profiles from models.dev:
 uv add langchain-model-profiles  # Install once globally or in dev dependencies
 
 # Refresh profiles for your provider
-langchain-model-profiles refresh \
+langchain-profiles refresh \
     --provider provider_name \
     --data-dir ./langchain_provider_name/data
 ```
@@ -671,7 +671,6 @@ Create `tests/unit_tests/chat_models/test_standard.py` (reference: `/libs/standa
 
 from typing import Type
 
-import pytest
 from langchain_core.language_models import BaseChatModel
 from langchain_tests.unit_tests import ChatModelUnitTests
 
@@ -681,11 +680,11 @@ from langchain_provider_name import ChatProviderModel
 class TestProviderModelStandard(ChatModelUnitTests):
     """Standard unit tests for ChatProviderModel."""
     
-    @pytest.fixture
+    @property
     def chat_model_class(self) -> Type[BaseChatModel]:
         return ChatProviderModel
     
-    @pytest.fixture
+    @property
     def chat_model_params(self) -> dict:
         """Parameters to instantiate the chat model.
         
@@ -713,7 +712,6 @@ Create `tests/integration_tests/chat_models/test_standard.py`:
 
 from typing import Type
 
-import pytest
 from langchain_core.language_models import BaseChatModel
 from langchain_tests.integration_tests import ChatModelIntegrationTests
 
@@ -723,11 +721,11 @@ from langchain_provider_name import ChatProviderModel
 class TestProviderModelIntegration(ChatModelIntegrationTests):
     """Standard integration tests for ChatProviderModel."""
     
-    @pytest.fixture
+    @property
     def chat_model_class(self) -> Type[BaseChatModel]:
         return ChatProviderModel
     
-    @pytest.fixture
+    @property
     def chat_model_params(self) -> dict:
         """Live API credentials (loaded from environment)."""
         return {
@@ -894,7 +892,7 @@ Keep the provider SDK locked in `pyproject.toml` to prevent breaking changes. Re
 Run the CLI tool periodically to fetch new models from models.dev:
 
 ```bash
-langchain-model-profiles refresh --provider provider_name --data-dir ./langchain_provider_name/data
+langchain-profiles refresh --provider provider_name --data-dir ./langchain_provider_name/data
 ```
 
 ### Testing
